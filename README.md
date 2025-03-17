@@ -50,6 +50,8 @@ In Claude desktop edit the settings as per https://modelcontextprotocol.io/quick
 }
 ```
 
+Restart Claude desktop, and you should see a new `"algolia"` tool is available.
+
 ## Debugging
 
 You can run the Inspector (see https://modelcontextprotocol.io/docs/tools/inspector) to check the MCP features and run them manually.
