@@ -72,3 +72,35 @@ Run the MCP inspector on the server:
 ```shell
 $ npx @modelcontextprotocol/inspector ./mcp
 ```
+
+## Using with Ollama
+
+You can actually run a local mcphost (which orchestrates the MCP servers for you), and then use them with other models locally via Ollama.
+
+We are using https://github.com/mark3labs/mcphost for this.
+
+As per the [README](https://github.com/mark3labs/mcphost?tab=readme-ov-file#installation-) you need a a config file, so you can copy the Claude one, and put it somewhere sensible so you can use it on the command line (for example `~/mcp.json`)
+
+```json filename="~/mcp.json"
+{
+   "mcpServers": {
+      "algolia": {
+         "command": "/path/to/the/repo/cmd/mcp/mcp",
+         "env": {
+            "ALGOLIA_APP_ID": "<APP_ID>",
+            "ALGOLIA_INDEX_NAME": "<INDEX_NAME>",
+            "ALGOLIA_API_KEY": "<API_KEY>"
+         }
+      }
+   }
+}
+```
+You can now run it directly (no need to check out the repo):
+```shell
+$ go run github.com/mark3labs/mcphost@latest --config ~/.mcp.json -m ollama:qwen2.5:3b
+```
+
+# FAQ
+
+* Resource templates and root are not supported by Claude desktop right now: https://github.com/orgs/modelcontextprotocol/discussions/136
+This is a weird one, since there is a bunch of content online showing the templates, maybe it's just not GA yet.

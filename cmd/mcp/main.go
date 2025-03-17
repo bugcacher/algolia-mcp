@@ -115,7 +115,6 @@ func main() {
 		"algolia://records/{objectID}",
 		"Lookup a record by object ID",
 		mcp.WithTemplateDescription("Get a record from the Algolia index by its object ID"),
-		mcp.WithTemplateMIMEType("application/json"),
 	)
 	mcps.AddResourceTemplate(recordResourceTemplate, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		objectID, _ := req.Params.Arguments["objectID"].(string)
