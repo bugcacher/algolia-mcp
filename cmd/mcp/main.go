@@ -16,23 +16,24 @@ import (
 func main() {
 	log.Printf("Starting algolia MCP server...")
 
-	if os.Getenv("ALGOLIA_APP_ID") == "" {
+	var algoliaAppID, algoliaAPIKey, algoliaIndexName string
+	if algoliaAppID = os.Getenv("ALGOLIA_APP_ID"); algoliaAppID == "" {
 		log.Fatal("ALGOLIA_APP_ID is required")
 	}
-	if os.Getenv("ALGOLIA_API_KEY") == "" {
+	if algoliaAPIKey = os.Getenv("ALGOLIA_API_KEY"); algoliaAPIKey == "" {
 		log.Fatal("ALGOLIA_API_KEY is required")
 	}
-	if os.Getenv("ALGOLIA_INDEX_NAME") == "" {
+	if algoliaIndexName = os.Getenv("ALGOLIA_INDEX_NAME"); algoliaIndexName == "" {
 		log.Fatal("ALGOLIA_INDEX_NAME is required")
 	}
 
-	client, err := search.NewClient(os.Getenv("ALGOLIA_APP_ID"), os.Getenv("ALGOLIA_API_KEY"))
+	client, err := search.NewClient(algoliaAppID, algoliaAPIKey)
 	if err != nil {
 		log.Fatalf("Error creating client: %v", err)
 	}
 
-	log.Printf("Algolia App ID: %q", os.Getenv("ALGOLIA_APP_ID"))
-	log.Printf("Algolia Index Name: %q", os.Getenv("ALGOLIA_INDEX_NAME"))
+	log.Printf("Algolia App ID: %q", algoliaAppID)
+	log.Printf("Algolia Index Name: %q", algoliaIndexName)
 
 	mcps := server.NewMCPServer(
 		"algolia-mcp",
@@ -58,13 +59,16 @@ func main() {
 		// What a mess.
 		searchResp, err := client.Search(
 			client.NewApiSearchRequest(
-				search.NewEmptySearchMethodParams().SetRequests(
-					[]search.SearchQuery{
-						*search.SearchForHitsAsSearchQuery(
-							search.NewEmptySearchForHits().SetIndexName(os.Getenv("ALGOLIA_INDEX_NAME")).SetQuery(query),
-						),
-					},
-				),
+				search.NewEmptySearchMethodParams().
+					SetRequests(
+						[]search.SearchQuery{
+							*search.SearchForHitsAsSearchQuery(
+								search.NewEmptySearchForHits().
+									SetIndexName(algoliaIndexName).
+									SetQuery(query),
+							),
+						},
+					),
 			),
 		)
 		if err != nil {
@@ -80,6 +84,69 @@ func main() {
 			MIMEType: "application/json",
 			Text:     string(b),
 		}), nil
+	})
+
+	settingsResource := mcp.NewResource(
+		"algolia://settings",
+		"Index settings",
+		mcp.WithResourceDescription("Get the settings for the Algolia index"),
+		mcp.WithMIMEType("application/json"),
+	)
+	mcps.AddResource(settingsResource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		settingsResp, err := client.GetSettings(client.NewApiGetSettingsRequest(algoliaIndexName))
+		if err != nil {
+			return nil, fmt.Errorf("could not get settings: %w", err)
+		}
+
+		b, err := json.Marshal(settingsResp)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal response: %w", err)
+		}
+
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				MIMEType: "application/json",
+				Text:     string(b),
+			},
+		}, nil
+	})
+
+	recordResourceTemplate := mcp.NewResourceTemplate(
+		"algolia://records/{objectID}",
+		"Lookup a record by object ID",
+		mcp.WithTemplateDescription("Get a record from the Algolia index by its object ID"),
+		mcp.WithTemplateMIMEType("application/json"),
+	)
+	mcps.AddResourceTemplate(recordResourceTemplate, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+		objectID, _ := req.Params.Arguments["objectID"].(string)
+
+		// Slightly better than the search endpoing, but still...
+		recordResp, err := client.GetObjects(
+			client.NewApiGetObjectsRequest(
+				search.NewEmptyGetObjectsParams().SetRequests(
+					[]search.GetObjectsRequest{
+						*search.NewEmptyGetObjectsRequest().
+							SetObjectID(objectID).
+							SetIndexName(algoliaIndexName),
+					},
+				),
+			),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("could not get record: %w", err)
+		}
+
+		b, err := json.Marshal(recordResp)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal response: %w", err)
+		}
+
+		return []mcp.ResourceContents{
+			mcp.TextResourceContents{
+				MIMEType: "application/json",
+				Text:     string(b),
+			},
+		}, nil
 	})
 
 	if err := server.ServeStdio(mcps); err != nil {
