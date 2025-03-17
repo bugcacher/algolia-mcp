@@ -57,18 +57,26 @@ func main() {
 		query, _ := req.Params.Arguments["query"].(string)
 
 		// What a mess.
+		mps := search.NewEmptySearchMethodParams().
+			SetRequests(
+				[]search.SearchQuery{
+					*search.SearchForHitsAsSearchQuery(
+						search.NewEmptySearchForHits().
+							SetIndexName(algoliaIndexName).
+							SetQuery(query),
+					),
+				},
+			)
+
+		br, err := json.Marshal(mps)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal request: %w", err)
+		}
+		log.Printf("run_query Request: %s", string(br))
+
 		searchResp, err := client.Search(
 			client.NewApiSearchRequest(
-				search.NewEmptySearchMethodParams().
-					SetRequests(
-						[]search.SearchQuery{
-							*search.SearchForHitsAsSearchQuery(
-								search.NewEmptySearchForHits().
-									SetIndexName(algoliaIndexName).
-									SetQuery(query),
-							),
-						},
-					),
+				mps,
 			),
 		)
 		if err != nil {
