@@ -10,7 +10,7 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/algolia/algoliasearch-client-go/v4/algolia/search"
+	"github.com/algolia/algoliasearch-client-go/v3/algolia/search"
 )
 
 func main() {
@@ -27,10 +27,8 @@ func main() {
 		log.Fatal("ALGOLIA_INDEX_NAME is required")
 	}
 
-	client, err := search.NewClient(algoliaAppID, algoliaAPIKey)
-	if err != nil {
-		log.Fatalf("Error creating client: %v", err)
-	}
+	client := search.NewClient(algoliaAppID, algoliaAPIKey)
+	index := client.InitIndex(algoliaIndexName)
 
 	log.Printf("Algolia App ID: %q", algoliaAppID)
 	log.Printf("Algolia Index Name: %q", algoliaIndexName)
@@ -56,39 +54,46 @@ func main() {
 		// indexName, _ := req.Params.Arguments["index"].(string)
 		query, _ := req.Params.Arguments["query"].(string)
 
-		// What a mess.
-		mps := search.NewEmptySearchMethodParams().
-			SetRequests(
-				[]search.SearchQuery{
-					*search.SearchForHitsAsSearchQuery(
-						search.NewEmptySearchForHits().
-							SetIndexName(algoliaIndexName).
-							SetQuery(query),
-					),
-				},
-			)
-
-		br, err := json.Marshal(mps)
+		resp, err := index.Search(query)
 		if err != nil {
-			return nil, fmt.Errorf("could not marshal request: %w", err)
-		}
-		log.Printf("run_query Request: %s", string(br))
-
-		searchResp, err := client.Search(
-			client.NewApiSearchRequest(
-				mps,
-			),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("could not query (don't panic): %w", err)
+			return nil, fmt.Errorf("could not search: %w", err)
 		}
 
-		b, err := json.Marshal(searchResp)
+		b, err := json.Marshal(resp)
 		if err != nil {
 			return nil, fmt.Errorf("could not marshal response: %w", err)
 		}
 
 		return mcp.NewToolResultResource("query results", mcp.TextResourceContents{
+			MIMEType: "application/json",
+			Text:     string(b),
+		}), nil
+	})
+
+	getObjectTool := mcp.NewTool(
+		"get_object",
+		mcp.WithDescription("Get an object by its object ID"),
+		mcp.WithString(
+			"objectID",
+			mcp.Description("The object ID to look up"),
+			mcp.Required(),
+		),
+	)
+
+	mcps.AddTool(getObjectTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		objectID, _ := req.Params.Arguments["objectID"].(string)
+
+		var x map[string]any
+		if err := index.GetObject(objectID, &x); err != nil {
+			return nil, fmt.Errorf("could not get object: %w", err)
+		}
+
+		b, err := json.Marshal(x)
+		if err != nil {
+			return nil, fmt.Errorf("could not marshal response: %w", err)
+		}
+
+		return mcp.NewToolResultResource("object", mcp.TextResourceContents{
 			MIMEType: "application/json",
 			Text:     string(b),
 		}), nil
@@ -101,7 +106,7 @@ func main() {
 		mcp.WithMIMEType("application/json"),
 	)
 	mcps.AddResource(settingsResource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-		settingsResp, err := client.GetSettings(client.NewApiGetSettingsRequest(algoliaIndexName))
+		settingsResp, err := index.GetSettings()
 		if err != nil {
 			return nil, fmt.Errorf("could not get settings: %w", err)
 		}
@@ -127,23 +132,12 @@ func main() {
 	mcps.AddResourceTemplate(recordResourceTemplate, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
 		objectID, _ := req.Params.Arguments["objectID"].(string)
 
-		// Slightly better than the search endpoing, but still...
-		recordResp, err := client.GetObjects(
-			client.NewApiGetObjectsRequest(
-				search.NewEmptyGetObjectsParams().SetRequests(
-					[]search.GetObjectsRequest{
-						*search.NewEmptyGetObjectsRequest().
-							SetObjectID(objectID).
-							SetIndexName(algoliaIndexName),
-					},
-				),
-			),
-		)
-		if err != nil {
-			return nil, fmt.Errorf("could not get record: %w", err)
+		var x map[string]any
+		if err := index.GetObject(objectID, &x); err != nil {
+			return nil, fmt.Errorf("could not get object: %w", err)
 		}
 
-		b, err := json.Marshal(recordResp)
+		b, err := json.Marshal(x)
 		if err != nil {
 			return nil, fmt.Errorf("could not marshal response: %w", err)
 		}

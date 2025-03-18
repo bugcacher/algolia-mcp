@@ -4,7 +4,7 @@ This repository contains experimental [Model Context Protocol (or MCP)](https://
 
 ## Installation
 
-First follow the [quick start](https://modelcontextprotocol.io/quickstart/user), which will install Claude Desktop and setup a sample Fileserver MCP server.
+First follow the [quick start](https://modelcontextprotocol.io/quickstart/user), which will install Claude Desktop and setup a sample Fileserver MCP server.  This is a great introduction to using MCP and will let you debug things using the official guide if there are issues.
 
 ## Setup the prototype Algolia MCP server
 
