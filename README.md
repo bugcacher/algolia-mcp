@@ -97,7 +97,7 @@ As per the [README](https://github.com/mark3labs/mcphost?tab=readme-ov-file#inst
 ```
 You can now run it directly (no need to check out the repo):
 ```shell
-$ go run github.com/mark3labs/mcphost@latest --config ~/.mcp.json -m ollama:qwen2.5:3b
+$ go run github.com/mark3labs/mcphost@latest --config ~/mcp.json -m ollama:qwen2.5:3b
 ```
 
 # FAQ
