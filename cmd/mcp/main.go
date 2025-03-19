@@ -60,15 +60,7 @@ func main() {
 			return nil, fmt.Errorf("could not search: %w", err)
 		}
 
-		b, err := json.Marshal(resp)
-		if err != nil {
-			return nil, fmt.Errorf("could not marshal response: %w", err)
-		}
-
-		return mcp.NewToolResultResource("query results", mcp.TextResourceContents{
-			MIMEType: "application/json",
-			Text:     string(b),
-		}), nil
+		return jsonResponse("query results", resp)
 	})
 
 	getObjectTool := mcp.NewTool(
@@ -90,16 +82,20 @@ func main() {
 				fmt.Sprintf("could not get object: %v", err),
 			), nil
 		}
+		return jsonResponse("object", x)
+	})
 
-		b, err := json.Marshal(x)
+	getSettingsTool := mcp.NewTool(
+		"get_settings",
+		mcp.WithDescription("Get the settings for the Algolia index"),
+	)
+
+	mcps.AddTool(getSettingsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		settingsResp, err := index.GetSettings()
 		if err != nil {
-			return nil, fmt.Errorf("could not marshal response: %w", err)
+			return nil, fmt.Errorf("could not get settings: %w", err)
 		}
-
-		return mcp.NewToolResultResource("object", mcp.TextResourceContents{
-			MIMEType: "application/json",
-			Text:     string(b),
-		}), nil
+		return jsonResponse("settings", settingsResp)
 	})
 
 	searchRulesTool := mcp.NewTool(
@@ -144,15 +140,7 @@ func main() {
 			return nil, fmt.Errorf("could not search rules: %w", err)
 		}
 
-		b, err := json.Marshal(resp)
-		if err != nil {
-			return nil, fmt.Errorf("could not marshal response: %w", err)
-		}
-
-		return mcp.NewToolResultResource("rules", mcp.TextResourceContents{
-			MIMEType: "application/json",
-			Text:     string(b),
-		}), nil
+		return jsonResponse("rules", resp)
 	})
 
 	settingsResource := mcp.NewResource(
@@ -167,17 +155,7 @@ func main() {
 			return nil, fmt.Errorf("could not get settings: %w", err)
 		}
 
-		b, err := json.Marshal(settingsResp)
-		if err != nil {
-			return nil, fmt.Errorf("could not marshal response: %w", err)
-		}
-
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				MIMEType: "application/json",
-				Text:     string(b),
-			},
-		}, nil
+		return jsonResource(settingsResp)
 	})
 
 	recordResourceTemplate := mcp.NewResourceTemplate(
@@ -209,4 +187,31 @@ func main() {
 	if err := server.ServeStdio(mcps); err != nil {
 		fmt.Printf("Server error: %v\n", err)
 	}
+}
+
+func jsonResponse(name string, x any) (*mcp.CallToolResult, error) {
+	b, err := json.Marshal(x)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal response: %w", err)
+	}
+	return mcp.NewToolResultResource(
+		name,
+		mcp.TextResourceContents{
+			MIMEType: "application/json",
+			Text:     string(b),
+		},
+	), nil
+}
+
+func jsonResource(x any) ([]mcp.ResourceContents, error) {
+	b, err := json.Marshal(x)
+	if err != nil {
+		return nil, fmt.Errorf("could not marshal response: %w", err)
+	}
+	return []mcp.ResourceContents{
+		mcp.TextResourceContents{
+			MIMEType: "application/json",
+			Text:     string(b),
+		},
+	}, nil
 }
