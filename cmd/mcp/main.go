@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"time"
 
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -27,8 +28,8 @@ func main() {
 	if algoliaIndexName = os.Getenv("ALGOLIA_INDEX_NAME"); algoliaIndexName == "" {
 		log.Fatal("ALGOLIA_INDEX_NAME is required")
 	}
-	
-	algoliaWriteAPIKey = os.Getenv("ALGOLIA_WRITE_API_KEY"); 
+
+	algoliaWriteAPIKey = os.Getenv("ALGOLIA_WRITE_API_KEY")
 
 	client := search.NewClient(algoliaAppID, algoliaAPIKey)
 	index := client.InitIndex(algoliaIndexName)
@@ -42,7 +43,7 @@ func main() {
 	if algoliaWriteAPIKey != "" {
 		writeClient = search.NewClient(algoliaAppID, algoliaWriteAPIKey)
 		writeIndex = writeClient.InitIndex(algoliaIndexName)
-		log.Printf("Heads up! This MCP has write capabilities enabled.")	
+		log.Printf("Heads up! This MCP has write capabilities enabled.")
 	}
 
 	mcps := server.NewMCPServer(
@@ -60,16 +61,27 @@ func main() {
 			mcp.Description("The query to run against the index"),
 			mcp.Required(),
 		),
+		mcp.WithNumber(
+			"hitsPerPage",
+			mcp.Description("The number of hits to return per page"),
+		),
 	)
 
 	mcps.AddTool(runQueryTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		// indexName, _ := req.Params.Arguments["index"].(string)
 		query, _ := req.Params.Arguments["query"].(string)
 
-		resp, err := index.Search(query)
+		opts := []any{}
+		if hitsPerPage, ok := req.Params.Arguments["hitsPerPage"].(float64); ok {
+			opts = append(opts, opt.HitsPerPage(int(hitsPerPage)))
+		}
+
+		start := time.Now()
+		resp, err := index.Search(query, opts...)
 		if err != nil {
 			return nil, fmt.Errorf("could not search: %w", err)
 		}
+		log.Printf("Search for %q took %v", query, time.Since(start))
 
 		return jsonResponse("query results", resp)
 	})
@@ -163,30 +175,30 @@ func main() {
 			mcp.Required(),
 		),
 	)
-	
+
 	mcps.AddTool(insertObjectTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		objStr, ok := req.Params.Arguments["object"].(string)
 		if !ok {
 			return mcp.NewToolResultError("invalid object format, expected JSON string"), nil
 		}
-	
+
 		// Parse the JSON string into an object
 		var obj map[string]interface{}
 		if err := json.Unmarshal([]byte(objStr), &obj); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid JSON: %v", err)), nil
 		}
-	
+
 		// Check if objectID is provided
 		if _, exists := obj["objectID"]; !exists {
 			return mcp.NewToolResultError("object must include an objectID field"), nil
 		}
-	
+
 		// Save the object to the index
 		res, err := writeIndex.SaveObject(obj)
 		if err != nil {
 			return nil, fmt.Errorf("could not save object: %w", err)
 		}
-	
+
 		return jsonResponse("insert result", res)
 	})
 
@@ -199,75 +211,96 @@ func main() {
 			mcp.Required(),
 		),
 	)
-	
+
 	mcps.AddTool(insertObjectsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		objsStr, ok := req.Params.Arguments["objects"].(string)
 		if !ok {
 			return mcp.NewToolResultError("invalid objects format, expected JSON string"), nil
 		}
-	
+
 		// Parse the JSON string into an array of objects
 		var objects []map[string]interface{}
 		if err := json.Unmarshal([]byte(objsStr), &objects); err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("invalid JSON: %v", err)), nil
 		}
-	
+
 		// Check if all objects have an objectID
 		for i, obj := range objects {
 			if _, exists := obj["objectID"]; !exists {
 				return mcp.NewToolResultError(fmt.Sprintf("object at index %d must include an objectID field", i)), nil
 			}
 		}
-	
+
 		// Save the objects to the index
 		res, err := writeIndex.SaveObjects(objects)
 		if err != nil {
 			return nil, fmt.Errorf("could not save objects: %w", err)
 		}
-	
+
 		return jsonResponse("batch insert result", res)
 	})
 
-	settingsResource := mcp.NewResource(
-		"algolia://settings",
-		"Index settings",
-		mcp.WithResourceDescription("Get the settings for the Algolia index"),
-		mcp.WithMIMEType("application/json"),
+	searchSynonymTool := mcp.NewTool(
+		"search_synonyms",
+		mcp.WithDescription("Search for synonyms in the Algolia index that match a query"),
+		mcp.WithString(
+			"query",
+			mcp.Description("The query to find synonyms for"),
+		),
 	)
-	mcps.AddResource(settingsResource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-		settingsResp, err := index.GetSettings()
+
+	mcps.AddTool(searchSynonymTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		query, _ := req.Params.Arguments["query"].(string)
+
+		resp, err := index.SearchSynonyms(query)
 		if err != nil {
-			return nil, fmt.Errorf("could not get settings: %w", err)
+			return nil, fmt.Errorf("could not search synonyms: %w", err)
 		}
 
-		return jsonResource(settingsResp)
+		return jsonResponse("synonyms", resp)
 	})
 
-	recordResourceTemplate := mcp.NewResourceTemplate(
-		"algolia://records/{objectID}",
-		"Lookup a record by object ID",
-		mcp.WithTemplateDescription("Get a record from the Algolia index by its object ID"),
-	)
-	mcps.AddResourceTemplate(recordResourceTemplate, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
-		objectID, _ := req.Params.Arguments["objectID"].(string)
+	// Experimenting with a resource instead of using a tool to fetch the settings.
+	// settingsResource := mcp.NewResource(
+	// 	"algolia://settings",
+	// 	"Index settings",
+	// 	mcp.WithResourceDescription("Get the settings for the Algolia index"),
+	// 	mcp.WithMIMEType("application/json"),
+	// )
+	// mcps.AddResource(settingsResource, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	// 	settingsResp, err := index.GetSettings()
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("could not get settings: %w", err)
+	// 	}
 
-		var x map[string]any
-		if err := index.GetObject(objectID, &x); err != nil {
-			return nil, fmt.Errorf("could not get object: %w", err)
-		}
+	// 	return jsonResource(settingsResp)
+	// })
 
-		b, err := json.Marshal(x)
-		if err != nil {
-			return nil, fmt.Errorf("could not marshal response: %w", err)
-		}
+	// recordResourceTemplate := mcp.NewResourceTemplate(
+	// 	"algolia://records/{objectID}",
+	// 	"Lookup a record by object ID",
+	// 	mcp.WithTemplateDescription("Get a record from the Algolia index by its object ID"),
+	// )
+	// mcps.AddResourceTemplate(recordResourceTemplate, func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+	// 	objectID, _ := req.Params.Arguments["objectID"].(string)
 
-		return []mcp.ResourceContents{
-			mcp.TextResourceContents{
-				MIMEType: "application/json",
-				Text:     string(b),
-			},
-		}, nil
-	})
+	// 	var x map[string]any
+	// 	if err := index.GetObject(objectID, &x); err != nil {
+	// 		return nil, fmt.Errorf("could not get object: %w", err)
+	// 	}
+
+	// 	b, err := json.Marshal(x)
+	// 	if err != nil {
+	// 		return nil, fmt.Errorf("could not marshal response: %w", err)
+	// 	}
+
+	// 	return []mcp.ResourceContents{
+	// 		mcp.TextResourceContents{
+	// 			MIMEType: "application/json",
+	// 			Text:     string(b),
+	// 		},
+	// 	}, nil
+	// })
 
 	if err := server.ServeStdio(mcps); err != nil {
 		fmt.Printf("Server error: %v\n", err)
