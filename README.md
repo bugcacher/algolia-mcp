@@ -14,10 +14,11 @@ Requirements:
 
 ### Clone the repo and build the server
 
-Clone this repo, and then from the repo root:
+Clone the repo, amd build the mcp server:
 
 ```shell
-$ cd cmd/mcp
+$ git clone https://github.com/algolia/mcp
+$ cd mcp/cmd/mcp
 $ go build
 ```
 We need to have the full path of the built server:
@@ -25,7 +26,7 @@ We need to have the full path of the built server:
 $ pwd
 /path/to/the/repo/cmd/mcp
 ```
-The full path to the built server is:
+The full path to the built MCP server is:
 
 ```shell
 /path/to/the/repo/cmd/mcp/mcp
@@ -63,6 +64,7 @@ From the repo root, setup the environment
 $ export ALGOLIA_APP_ID=""
 $ export ALGOLIA_INDEX_NAME=""
 $ export ALGOLIA_API_KEY=""
+$ export ALGOLIA_WRITE_API_KEY=""  # if you want to allow write operations, use your ADMIN key here
 ```
 Move into the server directory, and rebuild (if necessary):
 ```shell
