@@ -114,7 +114,7 @@ func main() {
 	)
 
 	mcps.AddTool(getSettingsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		settingsResp, err := writeIndex.GetSettings()
+		settingsResp, err := index.GetSettings()
 		if err != nil {
 			return nil, fmt.Errorf("could not get settings: %w", err)
 		}
