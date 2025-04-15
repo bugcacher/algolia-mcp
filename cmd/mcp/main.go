@@ -59,6 +59,7 @@ func main() {
 	indices.RegisterSetSettings(mcps, writeIndex)
 
 	// Tools for managing records
+	records.RegisterDeleteObject(mcps, writeIndex)
 	records.RegisterGetObject(mcps, index)
 	records.RegisterInsertObject(mcps, writeIndex)
 	records.RegisterInsertObjects(mcps, writeIndex)
