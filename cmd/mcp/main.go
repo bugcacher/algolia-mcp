@@ -61,8 +61,15 @@ func main() {
 	apiKey := os.Getenv("ALGOLIA_API_KEY")
 	indexName := os.Getenv("ALGOLIA_INDEX_NAME")
 
+	fmt.Printf("appID: %v\n", appID)
+	fmt.Printf("apiKey: %v\n", apiKey)
+	fmt.Printf("indexName: %v\n", indexName)
+
 	searchClient = search.NewClient(appID, apiKey)
 	searchIndex = searchClient.InitIndex(indexName)
+
+	fmt.Println(searchClient)
+	fmt.Println(searchIndex)
 
 	// Register tools from enabled packages.
 	if enabled["abtesting"] {
